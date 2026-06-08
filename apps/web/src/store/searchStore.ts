@@ -5,13 +5,14 @@ import { createMigratingPersistStorage } from '@/lib/persisted-storage';
 
 import type { YouTubeVideo } from '@vkara/youtube';
 import { blendSuggestions } from '@vkara/personalization';
-import { getYoutubeSuggestions } from '@/services/youtube-api';
+import { checkEmbeddableStatus, getYoutubeSuggestions } from '@/services/youtube-api';
 import {
     canLoadMoreSearchPages,
     searchFirstPage,
     searchNextPage,
     supportsSearchSuggestions,
 } from '@/lib/search-providers';
+import { getEmbeddabilityWarmupVideoIds } from '@/lib/youtube-embed-warmup';
 import { getPersonalizationProfile, usePersonalizationStore } from '@/store/personalizationStore';
 import { useCuratedStore } from '@/store/curatedStore';
 
@@ -53,6 +54,17 @@ let suggestionsGeneration = 0;
 
 let searchAbort: AbortController | null = null;
 let searchGeneration = 0;
+
+function warmEmbeddabilityCache(videos: YouTubeVideo[]): void {
+    const videoIds = getEmbeddabilityWarmupVideoIds(videos);
+    if (videoIds.length === 0) {
+        return;
+    }
+
+    void checkEmbeddableStatus(videoIds).catch((error) => {
+        console.debug('Embeddability warmup failed', error);
+    });
+}
 
 export const useSearchStore = create(
     persist<SearchState>(
@@ -140,6 +152,7 @@ export const useSearchStore = create(
                             nextToken: result.continuation,
                             tiktokSearchId: result.searchId,
                         });
+                        warmEmbeddabilityCache(result.items);
                     } catch (err) {
                         if (err instanceof Error && err.name === 'AbortError') return;
                         if (generation !== searchGeneration) return;
@@ -171,6 +184,7 @@ export const useSearchStore = create(
                         tiktokSearchId: result.searchId ?? state.tiktokSearchId,
                         loadMoreFailed: false,
                     }));
+                    warmEmbeddabilityCache(result.items);
                 } catch (err) {
                     console.error('Search error:', err);
                     set({ loadMoreFailed: true });

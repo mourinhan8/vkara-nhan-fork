@@ -84,6 +84,12 @@ export default async function RootLayout({
 
     return (
         <html lang={appLocale} dir={dir} suppressHydrationWarning>
+            <head>
+                <link rel="preconnect" href="https://www.youtube-nocookie.com" />
+                <link rel="preconnect" href="https://www.youtube.com" />
+                <link rel="preconnect" href="https://i.ytimg.com" />
+                <link rel="preconnect" href="https://googleads.g.doubleclick.net" />
+            </head>
             <body className={`${geistSans.variable} ${geistMono.variable} antialiased cursor-auto`}>
                 <JsonLd
                     locale={appLocale}
