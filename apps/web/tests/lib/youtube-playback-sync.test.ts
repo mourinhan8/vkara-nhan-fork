@@ -13,6 +13,7 @@ import {
     markServerPlaybackCommand,
     markUserSeekTarget,
     resetPlaybackSyncForTests,
+    resolveYoutubePlaybackBroadcast,
     shouldApplyRemoteCurrentTime,
     shouldSuppressPlaybackBroadcast,
 } from '@/lib/youtube-playback-sync';
@@ -217,6 +218,39 @@ describe('youtube player state helpers', () => {
 
         expect(isPlayerActuallyPlaying(playing)).toBe(true);
         expect(isPlayerActuallyPlaying(paused)).toBe(false);
+    });
+
+    it('does not broadcast iframe pause from TV-only player', () => {
+        expect(
+            resolveYoutubePlaybackBroadcast({
+                playerState: YT.PlayerState.PAUSED,
+                serverPlaying: true,
+                actualPlaying: false,
+                blocksNativePlayerControls: true,
+            }),
+        ).toBeNull();
+    });
+
+    it('still broadcasts iframe pause when native player controls are enabled', () => {
+        expect(
+            resolveYoutubePlaybackBroadcast({
+                playerState: YT.PlayerState.PAUSED,
+                serverPlaying: true,
+                actualPlaying: false,
+                blocksNativePlayerControls: false,
+            }),
+        ).toBe('pause');
+    });
+
+    it('broadcasts iframe play from TV-only player when server thinks it is paused', () => {
+        expect(
+            resolveYoutubePlaybackBroadcast({
+                playerState: YT.PlayerState.PLAYING,
+                serverPlaying: false,
+                actualPlaying: true,
+                blocksNativePlayerControls: true,
+            }),
+        ).toBe('play');
     });
 });
 

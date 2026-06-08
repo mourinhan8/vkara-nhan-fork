@@ -22,9 +22,8 @@ import {
     applyPreferredPlaybackQuality,
     applyRoomPlaybackToPlayer,
     clearPlaybackBroadcastSuppression,
-    isPlayerActuallyPlaying,
-    isYoutubePlaybackIntentState,
     loadTrackOnPlayer,
+    resolveYoutubePlaybackBroadcast,
     shouldSuppressPlaybackBroadcast,
     markServerPlaybackCommand,
 } from '@/lib/youtube-playback-sync';
@@ -95,8 +94,7 @@ export function PlayerColumn({
     const isNarrowViewport = viewportWidth > 0 && viewportWidth < TV_MIN_WIDTH_PX;
     const needsModeRecovery =
         effectiveLayoutMode === 'player' && (isNarrowViewport || !hasFinePointer);
-    const showRecoveryModeBar =
-        needsModeRecovery && (isTvPlayerIdle || Boolean(room?.playingNow));
+    const showRecoveryModeBar = needsModeRecovery && (isTvPlayerIdle || Boolean(room?.playingNow));
     const showCornerTvSwitch =
         isTvPlayerIdle && hasFinePointer && !isNarrowViewport && !needsModeRecovery;
 
@@ -251,21 +249,24 @@ export function PlayerColumn({
 
         if (effectiveLayoutMode !== 'remote' && room?.id && !shouldSuppressPlaybackBroadcast()) {
             const serverPlaying = useYouTubeStore.getState().room?.isPlaying ?? false;
+            const actualPlaying =
+                playerState === YT.PlayerState.PLAYING || playerState === YT.PlayerState.BUFFERING;
+            const broadcast = resolveYoutubePlaybackBroadcast({
+                playerState,
+                serverPlaying,
+                actualPlaying,
+                blocksNativePlayerControls: effectiveLayoutMode === 'player',
+            });
 
-            if (isYoutubePlaybackIntentState(playerState)) {
-                const playing = playerState === YT.PlayerState.PLAYING;
-                if (serverPlaying !== playing) {
-                    ensureConnectedAndSend({ type: playing ? 'play' : 'pause' });
-                }
-                setIsPlaying(playing);
-            } else if (isPlayerActuallyPlaying(event.target) !== serverPlaying) {
-                const playing = isPlayerActuallyPlaying(event.target);
-                if (playing) {
-                    ensureConnectedAndSend({ type: 'play' });
-                } else {
-                    ensureConnectedAndSend({ type: 'pause' });
-                }
-                setIsPlaying(playing);
+            if (broadcast) {
+                ensureConnectedAndSend({ type: broadcast });
+                setIsPlaying(broadcast === 'play');
+            } else if (
+                effectiveLayoutMode === 'player' &&
+                serverPlaying &&
+                playerState === YT.PlayerState.PAUSED
+            ) {
+                applyRoomPlaybackToPlayer(event.target, true);
             }
         }
 

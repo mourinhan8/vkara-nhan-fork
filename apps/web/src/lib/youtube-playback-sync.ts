@@ -35,6 +35,41 @@ export function isYoutubePlaybackIntentState(state: number): boolean {
     return state === YT.PlayerState.PLAYING || state === YT.PlayerState.PAUSED;
 }
 
+export type YoutubePlaybackBroadcast = 'play' | 'pause';
+
+export function resolveYoutubePlaybackBroadcast({
+    playerState,
+    serverPlaying,
+    actualPlaying,
+    blocksNativePlayerControls,
+}: {
+    playerState: number;
+    serverPlaying: boolean;
+    actualPlaying: boolean;
+    blocksNativePlayerControls: boolean;
+}): YoutubePlaybackBroadcast | null {
+    if (blocksNativePlayerControls) {
+        if (playerState === YT.PlayerState.PLAYING && !serverPlaying) {
+            return 'play';
+        }
+        return null;
+    }
+
+    if (isYoutubePlaybackIntentState(playerState)) {
+        const playing = playerState === YT.PlayerState.PLAYING;
+        if (serverPlaying !== playing) {
+            return playing ? 'play' : 'pause';
+        }
+        return null;
+    }
+
+    if (actualPlaying !== serverPlaying) {
+        return actualPlaying ? 'play' : 'pause';
+    }
+
+    return null;
+}
+
 const STALE_PLAYBACK_FORWARD_JUMP_SEC = 5;
 const STALE_TRACK_TIMELINE_SEC = 60;
 const SEEK_TARGET_MATCH_TOLERANCE_SEC = 1;
