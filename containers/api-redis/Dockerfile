@@ -13,6 +13,7 @@ COPY packages/cache-redis/package.json ./packages/cache-redis/package.json
 COPY packages/validators/package.json ./packages/validators/package.json
 COPY packages/youtube/package.json ./packages/youtube/package.json
 COPY packages/room/package.json ./packages/room/package.json
+COPY packages/tiktok/package.json ./packages/tiktok/package.json
 COPY packages/personalization/package.json ./packages/personalization/package.json
 COPY packages/curated-playlists/package.json ./packages/curated-playlists/package.json
 
@@ -23,7 +24,8 @@ RUN bun install --frozen-lockfile \
     --filter '@vkara/cache-redis' \
     --filter '@vkara/validators' \
     --filter '@vkara/youtube' \
-    --filter '@vkara/room'
+    --filter '@vkara/room' \
+    --filter '@vkara/tiktok'
 
 COPY apps/api ./apps/api
 COPY packages/env ./packages/env
@@ -32,6 +34,7 @@ COPY packages/cache-redis ./packages/cache-redis
 COPY packages/validators ./packages/validators
 COPY packages/youtube ./packages/youtube
 COPY packages/room ./packages/room
+COPY packages/tiktok ./packages/tiktok
 
 ENV NODE_ENV=production
 
@@ -41,6 +44,11 @@ ENV TURBO_TEAM=${TURBO_TEAM}
 RUN --mount=type=secret,id=TURBO_TOKEN,required=false \
     TURBO_TOKEN=$(test -f /run/secrets/TURBO_TOKEN && cat /run/secrets/TURBO_TOKEN || true) \
     bunx turbo run build --filter='@vkara/api' --force
+
+# Bun --compile marks playwright as external; copy runtime deps next to the binary.
+RUN mkdir -p /runtime/node_modules && \
+    cp -r /repo/node_modules/.bun/playwright@*/node_modules/playwright /runtime/node_modules/ && \
+    cp -r /repo/node_modules/.bun/playwright-core@*/node_modules/playwright-core /runtime/node_modules/
 
 FROM build AS production
 
@@ -53,15 +61,40 @@ WORKDIR /app
 RUN mkdir -p /app && \
     chown bun:bun /app
 COPY --chown=bun:bun --from=build /repo/apps/api/dist/server ./server
+COPY --chown=bun:bun --from=build /runtime/node_modules ./node_modules
 RUN chmod +x /app/server && \
     chown bun:bun /app/server
 
+# System Chromium for Alpine (Playwright npm package stays external to the compiled binary).
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 RUN apk update && \
-    apk add --no-cache supervisor redis
+    apk add --no-cache supervisor redis wget
+
+RUN ARCH="$(uname -m)" && \
+    case "${ARCH}" in \
+        x86_64) CF_ARCH=amd64 ;; \
+        aarch64|arm64) CF_ARCH=arm64 ;; \
+        *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
+    esac && \
+    wget -qO /usr/local/bin/cloudflared \
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" && \
+    chmod 755 /usr/local/bin/cloudflared
 
 COPY --chown=bun:bun ./containers/api-redis/supervisord.conf ./supervisord.conf
 COPY --chown=bun:bun ./containers/api-redis/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+COPY --chown=bun:bun ./containers/api-redis/start-api.sh ./start-api.sh
+RUN chmod +x ./entrypoint.sh ./start-api.sh
 
 RUN touch /app/supervisord.pid && \
     chown bun:bun /app/supervisord.pid && \

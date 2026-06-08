@@ -13,6 +13,7 @@ COPY packages/cache-redis/package.json ./packages/cache-redis/package.json
 COPY packages/validators/package.json ./packages/validators/package.json
 COPY packages/youtube/package.json ./packages/youtube/package.json
 COPY packages/room/package.json ./packages/room/package.json
+COPY packages/tiktok/package.json ./packages/tiktok/package.json
 COPY packages/personalization/package.json ./packages/personalization/package.json
 COPY packages/curated-playlists/package.json ./packages/curated-playlists/package.json
 
@@ -27,6 +28,7 @@ RUN bun install --frozen-lockfile \
     --filter '@vkara/validators' \
     --filter '@vkara/youtube' \
     --filter '@vkara/room' \
+    --filter '@vkara/tiktok' \
     --filter '@vkara/personalization' \
     --filter '@vkara/curated-playlists' \
     && bun add --dev typescript@5.7.3
@@ -39,6 +41,7 @@ COPY packages/cache-redis ./packages/cache-redis
 COPY packages/validators ./packages/validators
 COPY packages/youtube ./packages/youtube
 COPY packages/room ./packages/room
+COPY packages/tiktok ./packages/tiktok
 
 ENV NODE_ENV=production
 
@@ -49,17 +52,25 @@ RUN --mount=type=secret,id=TURBO_TOKEN,required=false \
     TURBO_TOKEN=$(test -f /run/secrets/TURBO_TOKEN && cat /run/secrets/TURBO_TOKEN || true) \
     bunx turbo run build --filter='@vkara/api' --force
 
+RUN mkdir -p /runtime/node_modules && \
+    cp -r /repo/node_modules/.bun/playwright@*/node_modules/playwright /runtime/node_modules/ && \
+    cp -r /repo/node_modules/.bun/playwright-core@*/node_modules/playwright-core /runtime/node_modules/
+
 FROM deps AS build-web
 COPY apps/web ./apps/web
 COPY packages/env ./packages/env
 COPY packages/validators ./packages/validators
 COPY packages/youtube ./packages/youtube
+COPY packages/tiktok ./packages/tiktok
 COPY packages/room ./packages/room
 COPY packages/personalization ./packages/personalization
 COPY packages/curated-playlists ./packages/curated-playlists
 
 ENV VKARA_AIO=1
 ENV NEXT_PUBLIC_API_URL=/api/vkara
+
+ARG NEXT_PUBLIC_TIKTOK_API_URL
+ENV NEXT_PUBLIC_TIKTOK_API_URL=${NEXT_PUBLIC_TIKTOK_API_URL}
 
 ARG TURBO_TEAM
 ENV TURBO_TEAM=${TURBO_TEAM}
@@ -90,7 +101,20 @@ COPY --from=build-web /repo/apps/web/public ./apps/web/public
 
 # Copy compiled API last; --force build avoids glibc remote-cache binary on Alpine.
 COPY --from=build-api /repo/apps/api/dist/server ./server
+COPY --from=build-api /runtime/node_modules ./node_modules
 RUN chmod +x ./server
+
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 COPY ./containers/aio/Caddyfile ./Caddyfile
 COPY ./containers/aio/supervisord.conf ./supervisord.conf

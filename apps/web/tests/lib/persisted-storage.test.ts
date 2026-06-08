@@ -29,6 +29,8 @@ describe('normalizePersistedRoom', () => {
             captionsLanguage: DEFAULT_CAPTION_LANGUAGE,
             captionTracks: [],
             captionTracksVideoId: null,
+            tiktokPhotoIndex: 0,
+            tiktokPhotoMaxIndex: 0,
         });
     });
 
@@ -69,9 +71,7 @@ describe('createMigratingPersistStorage', () => {
         storage.setItem(PERSIST_STORE_KEYS.youtube, JSON.stringify(legacyEnvelope));
 
         const persistStorage = createMigratingPersistStorage();
-        const raw = await Promise.resolve(
-            persistStorage.getItem(PERSIST_STORE_KEYS.youtube),
-        );
+        const raw = await Promise.resolve(persistStorage.getItem(PERSIST_STORE_KEYS.youtube));
         expect(raw).not.toBeNull();
 
         const parsed = JSON.parse(raw as string) as {
@@ -81,6 +81,8 @@ describe('createMigratingPersistStorage', () => {
         expect(parsed.version).toBe(1);
         expect(parsed.state.room.captionTracks).toEqual([]);
         expect(parsed.state.room.captionsLanguage).toBe(DEFAULT_CAPTION_LANGUAGE);
+        expect(parsed.state.room.tiktokPhotoIndex).toBe(0);
+        expect(parsed.state.room.tiktokPhotoMaxIndex).toBe(0);
     });
 
     it('removes corrupt entries instead of throwing', () => {

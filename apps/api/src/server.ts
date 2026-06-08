@@ -15,8 +15,11 @@ import { scheduleHourlyReportJob } from '@/queues/hourly-report';
 import { createContextLogger } from '@/utils/logger';
 import type { ServerMessage } from '@vkara/room';
 
+import { isExperimentsEnabled } from '@vkara/env';
+
 import { env } from './env';
 import { redis } from './redis';
+import { searchTiktokElysia, shutdownTikTokPool } from './tiktok';
 import { searchYoutubeiElysia } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
@@ -56,6 +59,7 @@ export const wsServer = new Elysia({
     .on('stop', async () => {
         serverLogger.info('Server stop initiated');
         try {
+            await shutdownTikTokPool().catch(() => {});
             await redis.quit();
             await wsServer.stop();
             serverLogger.info('Server stopped successfully');
@@ -90,6 +94,7 @@ export const wsServer = new Elysia({
         }),
     )
     .use(searchYoutubeiElysia)
+    .use(isExperimentsEnabled(env) ? searchTiktokElysia : new Elysia())
     .get('/health', () => ({
         status: 'ok',
         timestamp: Date.now(),
@@ -98,16 +103,6 @@ export const wsServer = new Elysia({
         cpuUsage: process.cpuUsage(),
     }))
     .listen(env.PORT);
-
-process.on('beforeExit', async () => {
-    serverLogger.info('Server stopping due to beforeExit event');
-    await redis.quit().catch((error) => {
-        serverLogger.error('Error closing Redis connection', { error });
-    });
-    await wsServer.stop().catch((error) => {
-        serverLogger.error('Error stopping WebSocket server', { error });
-    });
-});
 
 ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach((signal) => {
     process.on(signal, async () => {
@@ -118,6 +113,7 @@ process.on('beforeExit', async () => {
         }, 5000);
 
         try {
+            await shutdownTikTokPool().catch(() => {});
             await redis.quit();
             await wsServer.stop();
             serverLogger.info('Clean shutdown completed');

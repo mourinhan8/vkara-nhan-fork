@@ -12,6 +12,7 @@ import {
 } from '@vkara/personalization';
 
 import type { YouTubeVideo } from '@vkara/youtube';
+import { isTikTokProviderActive } from '@/lib/video-provider';
 import { getRelatedVideos, searchYoutube } from '@/services/youtube-api';
 
 type SourceCursor = {
@@ -233,9 +234,7 @@ export function useBrowseFeed(profile: PersonalizationProfile, room: BrowseRoomC
                 }
 
                 if (batch.length > 0) {
-                    videosRef.current = replaceExisting
-                        ? batch
-                        : [...videosRef.current, ...batch];
+                    videosRef.current = replaceExisting ? batch : [...videosRef.current, ...batch];
                     setVideos(videosRef.current);
                     setLoadError(false);
                     setHasMore(computeHasMore());
@@ -265,6 +264,17 @@ export function useBrowseFeed(profile: PersonalizationProfile, room: BrowseRoomC
     );
 
     useEffect(() => {
+        if (isTikTokProviderActive()) {
+            generationRef.current += 1;
+            setVideos([]);
+            setHasMore(false);
+            setLoadError(false);
+            setIsLoading(false);
+            setIsLoadingMore(false);
+            loadingRef.current = false;
+            return;
+        }
+
         const sources = buildBrowseFeedSources(profileRef.current, roomRef.current);
         generationRef.current += 1;
         const generation = generationRef.current;

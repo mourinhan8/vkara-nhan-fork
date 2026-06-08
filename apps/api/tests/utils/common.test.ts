@@ -1,5 +1,5 @@
 import type { YouTubeVideo } from '@vkara/youtube';
-import type { Room } from '@vkara/room';
+import { createTestRoom } from '@vkara/room/test-fixtures';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -71,27 +71,40 @@ describe('sanitizeVideoForClient', () => {
         expect('channel' in sanitized).toBe(false);
         expect(sanitized.thumbnails.length).toBeGreaterThan(0);
     });
+
+    it('does not inject YouTube thumbnail slots into TikTok videos', () => {
+        const tiktokThumb =
+            'https://p16-common-sign.tiktokcdn.com/tos-alisg-i-photomode-sg/cover~tplv-photomode-image.jpeg';
+        const sanitized = sanitizeVideoForClient({
+            id: '7575874238628891922',
+            title: 'photo post',
+            duration: 0,
+            duration_formatted: '',
+            type: 'photo',
+            url: 'https://www.tiktok.com/@user/video/7575874238628891922',
+            uploadedAt: '',
+            views: 1,
+            channels: [{ name: 'User', verified: false }],
+            thumbnails: [{ url: tiktokThumb, width: 540, height: 960 }],
+            source: 'tiktok',
+        });
+
+        expect(sanitized.thumbnails).toHaveLength(1);
+        expect(sanitized.thumbnails[0]?.url).toBe(tiktokThumb);
+        expect(sanitized.thumbnails.some((entry) => entry.url.includes('ytimg.com'))).toBe(false);
+    });
 });
 
 describe('cleanUpRoomField', () => {
     it('strips clients and sanitizes queue videos', () => {
-        const room: Room = {
+        const room = createTestRoom({
             id: '1234',
             clients: ['ws1'],
             videoQueue: [video('q1')],
-            historyQueue: [],
-            volume: 50,
-            showQRInPlayer: true,
-            captionsEnabled: false,
-            captionsLanguage: 'vi',
-            captionTracks: [],
-            captionTracksVideoId: null,
             playingNow: video('now'),
-            lastActivity: 0,
-            creatorId: 'c1',
+            volume: 50,
             isPlaying: true,
-            currentTime: 0,
-        };
+        });
 
         const cleaned = cleanUpRoomField(room);
 
