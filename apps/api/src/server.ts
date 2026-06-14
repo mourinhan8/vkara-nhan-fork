@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import type { ElysiaWS } from 'elysia/ws';
-import cors from '@elysiajs/cors';
+import cors, { type CORSConfig } from '@elysiajs/cors';
 import { openapi } from '@elysiajs/openapi';
 import type { ZodType } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -15,7 +15,8 @@ import { scheduleHourlyReportJob } from '@/queues/hourly-report';
 import { createContextLogger } from '@/utils/logger';
 import type { ServerMessage } from '@vkara/room';
 
-import { isExperimentsEnabled } from '@vkara/env';
+import { applyTlsInsecureRuntime, isExperimentsEnabled } from '@vkara/env';
+import { resolveCorsConfig } from '@vkara/env/server';
 
 import { env } from './env';
 import { redis } from './redis';
@@ -23,6 +24,12 @@ import { searchTiktokElysia, shutdownTikTokPool } from './tiktok';
 import { searchYoutubeiElysia } from './youtubei';
 
 const serverLogger = createContextLogger('Server');
+
+if (applyTlsInsecureRuntime(env)) {
+    serverLogger.warn(
+        'VKARA_TLS_INSECURE is enabled — outbound TLS certificate verification is disabled',
+    );
+}
 
 export const wsConnections = new Map<string, ElysiaWS>();
 
@@ -68,14 +75,15 @@ export const wsServer = new Elysia({
         }
     })
     .state('wsConnections', wsConnections)
+    .use(cors(resolveCorsConfig(env.CORS_ORIGINS) satisfies CORSConfig))
     .use(
         createRoomWsPlugin({
             roomService,
             wsConnections,
             sendToClient,
+            corsOrigins: env.CORS_ORIGINS,
         }),
     )
-    .use(cors())
     .use(
         openapi({
             mapJsonSchema: {

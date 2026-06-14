@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     applyPreferredPlaybackQuality,
     applyRoomPlaybackToPlayer,
+    isYoutubePlayerUsable,
     loadTrackOnPlayer,
     clearPlaybackBroadcastSuppression,
     hasPendingUserSeek,
@@ -80,6 +81,18 @@ describe('applyRoomPlaybackToPlayer', () => {
         applyRoomPlaybackToPlayer(player, false);
         expect(player.pauseVideo).toHaveBeenCalledTimes(1);
         expect(player.playVideo).not.toHaveBeenCalled();
+    });
+
+    it('no-ops when iframe is detached', () => {
+        const player = {
+            getIframe: () => null,
+            getPlayerState: () => YT.PlayerState.PLAYING,
+            playVideo: vi.fn(),
+            pauseVideo: vi.fn(),
+        } as unknown as YT.Player;
+
+        applyRoomPlaybackToPlayer(player, false);
+        expect(player.pauseVideo).not.toHaveBeenCalled();
     });
 
     it('does not pause when embed is already paused', () => {
@@ -251,6 +264,42 @@ describe('youtube player state helpers', () => {
                 blocksNativePlayerControls: true,
             }),
         ).toBe('play');
+    });
+});
+
+describe('isYoutubePlayerUsable', () => {
+    const containsMock = vi.fn();
+
+    beforeEach(() => {
+        vi.stubGlobal('document', {
+            body: { contains: containsMock },
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        containsMock.mockReset();
+    });
+
+    it('rejects null and detached iframe players', () => {
+        expect(isYoutubePlayerUsable(null)).toBe(false);
+
+        const iframe = {} as HTMLIFrameElement;
+        containsMock.mockReturnValue(false);
+        const detached = {
+            getIframe: () => iframe,
+        } as unknown as YT.Player;
+        expect(isYoutubePlayerUsable(detached)).toBe(false);
+    });
+
+    it('accepts players with iframe in the document', () => {
+        const iframe = {} as HTMLIFrameElement;
+        containsMock.mockReturnValue(true);
+
+        const attached = {
+            getIframe: () => iframe,
+        } as unknown as YT.Player;
+        expect(isYoutubePlayerUsable(attached)).toBe(true);
     });
 });
 
