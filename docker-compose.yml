@@ -19,7 +19,7 @@ services:
         ports:
             - 8000:${PORT:-8000}
         networks:
-            - vkara_net
+            - host
         restart: unless-stopped
 
     api_redis:
