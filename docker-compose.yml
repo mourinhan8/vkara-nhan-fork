@@ -18,8 +18,7 @@ services:
               required: false
         ports:
             - 8000:${PORT:-8000}
-        networks:
-            - host
+        network_mode: host
         restart: unless-stopped
 
     api_redis:
